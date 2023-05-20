@@ -1,11 +1,8 @@
-package ru.alexander.sql;
-
-import java.util.Arrays;
-import java.util.List;
+package ru.alexander.database;
 
 public class SearchingTable {
-    private String[] parameters;
-    private Object[][] data;
+    private final String[] parameters;
+    private final Object[][] data;
 
     public SearchingTable(String[] parameters, Object[][] data) {
         this.parameters = parameters;
@@ -21,5 +18,9 @@ public class SearchingTable {
             if (parameters[i].equals(parameter))
                 return data[i];
         return null;
+    }
+
+    public Object[][] getData() {
+        return data;
     }
 }

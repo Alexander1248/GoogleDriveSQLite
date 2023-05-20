@@ -7,7 +7,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
-import com.google.api.client.http.AbstractInputStreamContent;
+import com.google.api.client.http.*;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
@@ -18,17 +18,15 @@ import com.google.api.services.drive.model.File;
 
 import java.io.*;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 public class GoogleDrivePipeline {
 
-    private static final String APPLICATION_NAME = "Google Drive SQLite";
+    private static final String APPLICATION_NAME = "Google Drive DB";
     private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
 
 
-//    private static final String TOKENS_DIRECTORY_PATH = "tokens";
+    public static final String TOKENS_DIRECTORY_PATH = "tokens";
 
     /**
      * Global instance of the scopes required by this quickstart.
@@ -39,6 +37,10 @@ public class GoogleDrivePipeline {
 
 
     private static Drive service;
+
+    private GoogleDrivePipeline() {}
+
+
     private static Credential getCredentials(final NetHttpTransport HTTP_TRANSPORT)
             throws IOException {
         // Load client secrets.
@@ -52,7 +54,7 @@ public class GoogleDrivePipeline {
         // Build flow and trigger user authorization request.
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
                 HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, SCOPES)
-//                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(TOKENS_DIRECTORY_PATH)))
+                .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(TOKENS_DIRECTORY_PATH)))
                 .setAccessType("offline")
                 .build();
         LocalServerReceiver receiver = new LocalServerReceiver.Builder().setPort(8888).build();
@@ -66,16 +68,18 @@ public class GoogleDrivePipeline {
         service = new Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
                 .setApplicationName(APPLICATION_NAME).build();
     }
-
+    private static String rootID = null;
    public static String start() throws GeneralSecurityException, IOException {
-       authorize();
-       String rootID;
-       if (!exists(APPLICATION_NAME)) rootID = createFolder(null, APPLICATION_NAME);
-       else rootID = findFile(APPLICATION_NAME);
+       if (rootID == null) {
+           authorize();
+           if (!exists(APPLICATION_NAME)) rootID = createFolder(null, APPLICATION_NAME);
+           else rootID = findFile(APPLICATION_NAME);
+       }
        return rootID;
    }
    public static void close() {
         service = null;
+        rootID = null;
    }
 
 
@@ -103,7 +107,7 @@ public class GoogleDrivePipeline {
         return null;
     }
 
-    public static String createFile(String parentID, String name, AbstractInputStreamContent uploadStreamContent) throws IOException {
+    public static String createFile(String parentID, String name, String type, byte[] data) throws IOException {
         if (service != null) {
             File fileMetadata = new File();
             fileMetadata.setName(name);
@@ -111,9 +115,8 @@ public class GoogleDrivePipeline {
                 fileMetadata.setParents(List.of(parentID));
 
             try {
-                File file = service.files().create(fileMetadata, uploadStreamContent)
-                        .setFields("id")
-                        .execute();
+                File file = service.files().create(fileMetadata, new ByteArrayContent(type, data))
+                        .setFields("id").execute();
                 return file.getId();
             } catch (GoogleJsonResponseException e) {
                 System.err.println("Unable to create file: " + e.getDetails());
@@ -123,11 +126,10 @@ public class GoogleDrivePipeline {
         return null;
     }
 
-    public static ByteArrayOutputStream loadFile(String id) throws IOException {
+    public static byte[] loadFile(String id) throws IOException {
         if (service != null) {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            service.files().get(id).executeMediaAndDownloadTo(outputStream);
-            return outputStream;
+            HttpResponse httpResponse = service.files().get(id).executeMedia().getRequest().execute();
+            return httpResponse.getContent().readAllBytes();
         }
         return null;
     }
